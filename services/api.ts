@@ -93,20 +93,20 @@ export interface UserInfo {
 }
 
 /**
- * 用户注册
+ * 用户注册 - simplified version
  */
 export async function register(username: string, password: string): Promise<AuthUser> {
-  return apiRequest<AuthUser>('/auth?action=register', {
+  return apiRequest<AuthUser>('/register', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
   });
 }
 
 /**
- * 用户登录
+ * 用户登录 - simplified version
  */
 export async function login(username: string, password: string): Promise<AuthUser> {
-  return apiRequest<AuthUser>('/auth?action=login', {
+  return apiRequest<AuthUser>('/login', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
   });
