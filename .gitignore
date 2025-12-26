@@ -12,18 +12,6 @@ dist
 dist-ssr
 *.local
 
-# 环境变量（敏感信息）
-.env
-.env.local
-.env.*.local
-
-# 数据库文件
-data/
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -34,6 +22,3 @@ data/
 *.njsproj
 *.sln
 *.sw?
-
-# Vercel
-.vercel
