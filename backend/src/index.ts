@@ -3,10 +3,21 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { config } from './config/env.js';
 import { generalLimiter } from './middleware/rateLimit.js';
+import { getDb, closeDb } from './db/database.js';
 import authRoutes from './routes/auth.js';
 import aiRoutes from './routes/ai.js';
 import userRoutes from './routes/user.js';
 import iapRoutes from './routes/iap.js';
+import lifeSimulationRoutes from './routes/life-simulation.js';
+
+// 初始化数据库
+try {
+    getDb();
+    console.log('SQLite database initialized successfully');
+} catch (error) {
+    console.error('Failed to initialize database:', error);
+    process.exit(1);
+}
 
 const app = express();
 
@@ -60,6 +71,7 @@ app.use('/auth', authRoutes);
 app.use('/ai', aiRoutes);
 app.use('/user', userRoutes);
 app.use('/iap', iapRoutes);
+app.use('/life-simulation', lifeSimulationRoutes);
 
 // 404 处理
 app.use((req, res) => {
@@ -91,6 +103,19 @@ app.listen(config.port, () => {
 🔒 Gemini API: ${config.gemini.apiKey ? '✓ Configured' : '✗ Missing'}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   `);
+});
+
+// 优雅关闭
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, closing database...');
+    closeDb();
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received, closing database...');
+    closeDb();
+    process.exit(0);
 });
 
 export default app;

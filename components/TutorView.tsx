@@ -136,9 +136,9 @@ export const TutorView: React.FC<TutorViewProps> = ({ job, resources, language }
                   ? 'bg-red-950/80 text-red-100 border border-red-800 rounded-tl-none'
                   : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
               }`}>
-              <ReactMarkdown className="prose prose-invert prose-sm max-w-none">
-                {msg.text}
-              </ReactMarkdown>
+              <div className="prose prose-invert prose-sm max-w-none">
+                <ReactMarkdown>{msg.text}</ReactMarkdown>
+              </div>
             </div>
           </div>
         ))}

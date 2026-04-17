@@ -4,7 +4,8 @@ export enum AppPhase {
   MULTIVERSE = 'MULTIVERSE',
   SIMULATION = 'SIMULATION',
   SKILL_TREE = 'SKILL_TREE',
-  TUTOR = 'TUTOR'
+  TUTOR = 'TUTOR',
+  LIFE_SIMULATION = 'LIFE_SIMULATION'
 }
 
 export type Language = 'zh' | 'en';

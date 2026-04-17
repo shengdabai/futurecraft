@@ -3,16 +3,16 @@
  * 在调用 Gemini 前后进行内容检查
  */
 
-// 敏感词列表（示例，实际应更完整）
-const sensitivePatterns = [
+// 敏感词模式工厂（每次调用返回新的 RegExp，避免 g flag 状态问题）
+const sensitivePatternFactories: ReadonlyArray<() => RegExp> = [
     // 政治敏感
-    /\b(暴力|恐怖|极端)\b/gi,
+    () => /\b(暴力|恐怖|极端)\b/gi,
     // 色情
-    /\b(色情|淫秽|裸体)\b/gi,
+    () => /\b(色情|淫秽|裸体)\b/gi,
     // 歧视
-    /\b(种族歧视|性别歧视|仇恨)\b/gi,
+    () => /\b(种族歧视|性别歧视|仇恨)\b/gi,
     // 违法
-    /\b(毒品|赌博|诈骗)\b/gi,
+    () => /\b(毒品|赌博|诈骗)\b/gi,
 ];
 
 // 用于替换敏感内容的占位符
@@ -31,11 +31,14 @@ export function checkContent(text: string): ContentCheckResult {
     const flaggedContent: string[] = [];
     let sanitizedText = text;
 
-    for (const pattern of sensitivePatterns) {
-        const matches = text.match(pattern);
+    for (const createPattern of sensitivePatternFactories) {
+        // 每次创建新的 RegExp 实例，避免 g flag lastIndex 状态问题
+        const matchPattern = createPattern();
+        const replacePattern = createPattern();
+        const matches = text.match(matchPattern);
         if (matches) {
             flaggedContent.push(...matches);
-            sanitizedText = sanitizedText.replace(pattern, REDACTED);
+            sanitizedText = sanitizedText.replace(replacePattern, REDACTED);
         }
     }
 
@@ -106,14 +109,17 @@ export function isUrlSafe(url: string): boolean {
 }
 
 /**
- * 过滤资源列表中的不安全 URL
+ * 过滤资源列表中的不安全 URL（不可变模式，返回新数组）
  */
-export function sanitizeResourceUrls(resources: Array<{ url?: string;[key: string]: any }>): void {
-    for (const resource of resources) {
+export function sanitizeResourceUrls<T extends { url?: string;[key: string]: unknown }>(
+    resources: ReadonlyArray<T>,
+): T[] {
+    return resources.map((resource) => {
         if (resource.url && !isUrlSafe(resource.url)) {
-            resource.url = undefined; // 移除不安全的 URL
+            return { ...resource, url: undefined };
         }
-    }
+        return { ...resource };
+    });
 }
 
 /**
