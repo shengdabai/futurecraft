@@ -1,20 +1,29 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { generateToken, authMiddleware } from '../middleware/auth.js';
+import { z } from 'zod';
+import { generateAccessToken, generateRefreshToken, authMiddleware } from '../middleware/auth.js';
 import { authLimiter } from '../middleware/rateLimit.js';
+import { verifyAppleIdentityToken } from '../services/appleAuthService.js';
+import * as userRepo from '../db/userRepository.js';
 
 const router = Router();
 
-// 模拟用户存储（生产环境应使用数据库）
-const users = new Map<string, {
-    id: string;
-    isGuest: boolean;
-    region: string;
-    username?: string;
-    appleUserId?: string;
-    creditBalance: number;
-    subscriptionTier: string;
-}>();
+// 输入验证 schemas
+const appleLoginSchema = z.object({
+    identityToken: z.string().min(1),
+    authorizationCode: z.string().min(1),
+    email: z.string().email().optional(),
+    fullName: z.string().max(100).optional(),
+    region: z.string().max(10).optional(),
+});
+
+const guestLoginSchema = z.object({
+    guestId: z.string().uuid().optional(),
+    region: z.string().max(10).optional(),
+});
+
+// Apple Bundle ID - 应从环境变量读取
+const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID || 'com.futurecraft.app';
 
 /**
  * POST /auth/apple
@@ -22,48 +31,62 @@ const users = new Map<string, {
  */
 router.post('/apple', authLimiter, async (req: Request, res: Response) => {
     try {
-        const { identityToken, authorizationCode, email, fullName } = req.body;
-
-        if (!identityToken || !authorizationCode) {
+        const parseResult = appleLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
             return res.status(400).json({
                 error: 'InvalidRequest',
                 message: '缺少必要的认证信息',
+                details: parseResult.error.flatten().fieldErrors,
             });
         }
 
-        // TODO: 实际生产环境需要验证 Apple identity token
-        // 1. 获取 Apple 的公钥
-        // 2. 验证 JWT 签名
-        // 3. 验证 claims (iss, aud, exp, etc.)
+        const { identityToken, email, fullName, region } = parseResult.data;
 
-        // 模拟验证成功，创建或获取用户
-        // 实际应该从 token 中解析 Apple user ID
-        const appleUserId = `apple_${Buffer.from(identityToken).toString('base64').substring(0, 20)}`;
+        // 验证 Apple Identity Token
+        let appleUserId: string;
+        let verifiedEmail: string | undefined;
 
-        let user = Array.from(users.values()).find(u => u.appleUserId === appleUserId);
-
-        if (!user) {
-            // 新用户
-            user = {
-                id: uuidv4(),
-                isGuest: false,
-                region: req.body.region || 'GLOBAL',
-                username: fullName || email?.split('@')[0] || 'User',
-                appleUserId,
-                creditBalance: 100, // 初始赠送
-                subscriptionTier: 'FREE',
-            };
-            users.set(user.id, user);
+        try {
+            const claims = await verifyAppleIdentityToken(identityToken, APPLE_BUNDLE_ID);
+            appleUserId = claims.sub;
+            verifiedEmail = claims.email;
+        } catch (verifyError) {
+            // 开发环境下允许降级（方便本地测试）
+            if (process.env.NODE_ENV === 'development') {
+                appleUserId = `apple_dev_${Buffer.from(identityToken).toString('base64url').substring(0, 20)}`;
+            } else {
+                return res.status(401).json({
+                    error: 'InvalidToken',
+                    message: 'Apple 身份验证失败',
+                });
+            }
         }
 
-        // 生成 Token
-        const accessToken = generateToken({
+        // 查找或创建用户
+        const existingUser = userRepo.findByAppleUserId(appleUserId);
+
+        const user = existingUser
+            ? userRepo.toUserObject(existingUser)
+            : userRepo.toUserObject(
+                userRepo.createUser({
+                    id: uuidv4(),
+                    username: fullName || verifiedEmail?.split('@')[0] || email?.split('@')[0] || 'User',
+                    appleUserId,
+                    isGuest: false,
+                    region: region || 'GLOBAL',
+                    creditBalance: 100,
+                    subscriptionTier: 'FREE',
+                }),
+            );
+
+        // 生成 Token（access 短过期，refresh 长过期）
+        const accessToken = generateAccessToken({
             userId: user.id,
             isGuest: false,
             region: user.region,
         });
 
-        const refreshToken = generateToken({
+        const refreshToken = generateRefreshToken({
             userId: user.id,
             isGuest: false,
             region: user.region,
@@ -98,24 +121,47 @@ router.post('/apple', authLimiter, async (req: Request, res: Response) => {
  */
 router.post('/guest', authLimiter, async (req: Request, res: Response) => {
     try {
-        const { guestId, region } = req.body;
-
-        let user = guestId ? users.get(guestId) : null;
-
-        if (!user) {
-            // 创建新游客用户
-            user = {
-                id: uuidv4(),
-                isGuest: true,
-                region: region || 'GLOBAL',
-                username: 'Guest',
-                creditBalance: 20, // 游客赠送较少
-                subscriptionTier: 'FREE',
-            };
-            users.set(user.id, user);
+        const parseResult = guestLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            return res.status(400).json({
+                error: 'InvalidRequest',
+                message: '请求参数无效',
+            });
         }
 
-        const accessToken = generateToken({
+        const { guestId, region } = parseResult.data;
+
+        // 如果提供了 guestId，尝试查找已有用户
+        const existingUser = guestId ? userRepo.findById(guestId) : undefined;
+
+        // 防止账户劫持：如果用户存在但不是 guest，拒绝访问
+        if (existingUser && existingUser.is_guest !== 1) {
+            return res.status(403).json({
+                error: 'Forbidden',
+                message: '该账户不是游客账户，请使用正确的登录方式',
+            });
+        }
+
+        const user = existingUser
+            ? userRepo.toUserObject(existingUser)
+            : userRepo.toUserObject(
+                userRepo.createUser({
+                    id: uuidv4(),
+                    username: 'Guest',
+                    isGuest: true,
+                    region: region || 'GLOBAL',
+                    creditBalance: 20,
+                    subscriptionTier: 'FREE',
+                }),
+            );
+
+        const accessToken = generateAccessToken({
+            userId: user.id,
+            isGuest: true,
+            region: user.region,
+        });
+
+        const refreshToken = generateRefreshToken({
             userId: user.id,
             isGuest: true,
             region: user.region,
@@ -123,7 +169,7 @@ router.post('/guest', authLimiter, async (req: Request, res: Response) => {
 
         res.json({
             accessToken,
-            refreshToken: accessToken, // 游客 refresh token 相同
+            refreshToken,
             user: {
                 id: user.id,
                 isGuest: user.isGuest,
@@ -150,14 +196,16 @@ router.post('/guest', authLimiter, async (req: Request, res: Response) => {
  */
 router.get('/me', authMiddleware, (req: Request, res: Response) => {
     const userId = req.user!.userId;
-    const user = users.get(userId);
+    const row = userRepo.findById(userId);
 
-    if (!user) {
+    if (!row) {
         return res.status(404).json({
             error: 'UserNotFound',
             message: '用户不存在',
         });
     }
+
+    const user = userRepo.toUserObject(row);
 
     res.json({
         id: user.id,
@@ -176,14 +224,21 @@ router.get('/me', authMiddleware, (req: Request, res: Response) => {
  * 刷新 Token
  */
 router.post('/refresh', authMiddleware, (req: Request, res: Response) => {
-    const newToken = generateToken({
+    // 刷新端点只接受 refresh token
+    if (req.user!.type !== 'refresh') {
+        return res.status(401).json({
+            error: 'InvalidTokenType',
+            message: '请使用 refresh token 刷新',
+        });
+    }
+
+    const newAccessToken = generateAccessToken({
         userId: req.user!.userId,
         isGuest: req.user!.isGuest,
         region: req.user!.region,
     });
 
-    res.json({ accessToken: newToken });
+    res.json({ accessToken: newAccessToken });
 });
 
 export default router;
-

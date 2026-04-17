@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Database
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +28,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.env.production
+.env

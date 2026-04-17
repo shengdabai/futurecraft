@@ -8,7 +8,7 @@ dotenv.config();
 const envSchema = z.object({
     // 服务器
     PORT: z.string().default('8080'),
-    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
 
     // JWT
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
@@ -32,6 +32,19 @@ const envSchema = z.object({
     CREDITS_PER_1K_INPUT_TOKENS: z.string().default('1'),
     CREDITS_PER_1K_OUTPUT_TOKENS: z.string().default('2'),
     FREE_CREDITS_PER_MONTH: z.string().default('100'),
+
+    // Apple Sign In
+    APPLE_BUNDLE_ID: z.string().default('com.futurecraft.app'),
+
+    // App Store Server API
+    APP_STORE_KEY_ID: z.string().default(''),
+    APP_STORE_ISSUER_ID: z.string().default(''),
+
+    // Google Cloud TTS (可选)
+    GOOGLE_CLOUD_TTS_API_KEY: z.string().default(''),
+
+    // 数据库
+    DB_PATH: z.string().default(''),
 
     // 日志
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

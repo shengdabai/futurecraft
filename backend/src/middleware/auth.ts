@@ -7,6 +7,7 @@ export interface JwtPayload {
     userId: string;
     isGuest: boolean;
     region: string;
+    type?: 'access' | 'refresh';
     iat?: number;
     exp?: number;
 }
@@ -38,6 +39,15 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
 
     try {
         const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
+
+        // 普通路由不接受 refresh token（除 /auth/refresh 端点外由路由自行检查）
+        if (decoded.type === 'refresh' && !req.path.endsWith('/refresh')) {
+            return res.status(401).json({
+                error: 'InvalidTokenType',
+                message: '不能使用 refresh token 访问此接口',
+            });
+        }
+
         req.user = decoded;
         next();
     } catch (error) {
@@ -75,19 +85,29 @@ export const optionalAuthMiddleware = (req: Request, res: Response, next: NextFu
 };
 
 /**
- * 生成 JWT Token
+ * 生成 Access Token（短过期 15 分钟）
  */
-export const generateToken = (payload: Omit<JwtPayload, 'iat' | 'exp'>): string => {
-    return jwt.sign(payload, config.jwt.secret, {
-        expiresIn: config.jwt.expiresIn,
+export const generateAccessToken = (
+    payload: Omit<JwtPayload, 'iat' | 'exp' | 'type'>,
+): string => {
+    return jwt.sign({ ...payload, type: 'access' }, config.jwt.secret, {
+        expiresIn: '15m',
     });
 };
 
 /**
- * 刷新 Token
+ * 生成 Refresh Token（长过期 30 天）
  */
-export const refreshToken = (oldPayload: JwtPayload): string => {
-    const { iat, exp, ...payload } = oldPayload;
-    return generateToken(payload);
+export const generateRefreshToken = (
+    payload: Omit<JwtPayload, 'iat' | 'exp' | 'type'>,
+): string => {
+    return jwt.sign({ ...payload, type: 'refresh' }, config.jwt.secret, {
+        expiresIn: '30d',
+    });
 };
+
+/**
+ * @deprecated 使用 generateAccessToken / generateRefreshToken
+ */
+export const generateToken = generateAccessToken;
 

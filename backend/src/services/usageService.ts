@@ -1,52 +1,49 @@
 import { config } from '../config/env.js';
+import { getDb } from '../db/database.js';
 
-// 内存存储（生产环境应使用数据库）
-interface UserUsage {
-    userId: string;
-    totalInputTokens: number;
-    totalOutputTokens: number;
-    totalCreditsUsed: number;
-    currentPeriodStart: Date;
-    currentPeriodEnd: Date;
-    requestCount: number;
-    lastRequestAt: Date;
+interface UsageSummary {
+    readonly totalInputTokens: number;
+    readonly totalOutputTokens: number;
+    readonly totalCreditsUsed: number;
+    readonly requestCount: number;
 }
-
-const userUsageMap = new Map<string, UserUsage>();
 
 /**
  * 获取当前计费周期的起止时间
  */
-function getCurrentBillingPeriod(): { start: Date; end: Date } {
+function getCurrentBillingPeriod(): { readonly start: string; readonly end: string } {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    return { start, end };
+    return {
+        start: start.toISOString(),
+        end: end.toISOString(),
+    };
 }
 
 /**
- * 获取或创建用户使用记录
+ * 获取用户当前计费周期的使用汇总
  */
-function getOrCreateUserUsage(userId: string): UserUsage {
-    let usage = userUsageMap.get(userId);
+function getCurrentPeriodUsage(userId: string): UsageSummary {
+    const db = getDb();
     const { start, end } = getCurrentBillingPeriod();
 
-    if (!usage || usage.currentPeriodEnd < new Date()) {
-        // 新用户或新计费周期
-        usage = {
-            userId,
-            totalInputTokens: 0,
-            totalOutputTokens: 0,
-            totalCreditsUsed: 0,
-            currentPeriodStart: start,
-            currentPeriodEnd: end,
-            requestCount: 0,
-            lastRequestAt: new Date(),
-        };
-        userUsageMap.set(userId, usage);
-    }
+    const row = db.prepare(`
+        SELECT
+            COALESCE(SUM(input_tokens), 0) as totalInputTokens,
+            COALESCE(SUM(output_tokens), 0) as totalOutputTokens,
+            COALESCE(SUM(credits_used), 0) as totalCreditsUsed,
+            COUNT(*) as requestCount
+        FROM usage_records
+        WHERE user_id = ? AND created_at >= ? AND created_at <= ?
+    `).get(userId, start, end) as UsageSummary;
 
-    return usage;
+    return {
+        totalInputTokens: row.totalInputTokens,
+        totalOutputTokens: row.totalOutputTokens,
+        totalCreditsUsed: row.totalCreditsUsed,
+        requestCount: row.requestCount,
+    };
 }
 
 /**
@@ -64,18 +61,17 @@ function calculateCredits(inputTokens: number, outputTokens: number): number {
 export function recordUsage(
     userId: string,
     inputTokens: number,
-    outputTokens: number
-): { creditsUsed: number; remainingCredits: number } {
-    const usage = getOrCreateUserUsage(userId);
-
+    outputTokens: number,
+): { readonly creditsUsed: number; readonly remainingCredits: number } {
+    const db = getDb();
     const creditsUsed = calculateCredits(inputTokens, outputTokens);
 
-    usage.totalInputTokens += inputTokens;
-    usage.totalOutputTokens += outputTokens;
-    usage.totalCreditsUsed += creditsUsed;
-    usage.requestCount += 1;
-    usage.lastRequestAt = new Date();
+    db.prepare(`
+        INSERT INTO usage_records (user_id, action, input_tokens, output_tokens, credits_used)
+        VALUES (?, 'ai_request', ?, ?, ?)
+    `).run(userId, inputTokens, outputTokens, creditsUsed);
 
+    const usage = getCurrentPeriodUsage(userId);
     const remainingCredits = Math.max(0, config.billing.freeCreditsPerMonth - usage.totalCreditsUsed);
 
     return { creditsUsed, remainingCredits };
@@ -85,7 +81,7 @@ export function recordUsage(
  * 检查用户是否有足够的 Credits
  */
 export function checkCredits(userId: string, estimatedTokens: number = 1000): boolean {
-    const usage = getOrCreateUserUsage(userId);
+    const usage = getCurrentPeriodUsage(userId);
     const estimatedCredits = calculateCredits(estimatedTokens, estimatedTokens);
     const remainingCredits = config.billing.freeCreditsPerMonth - usage.totalCreditsUsed;
 
@@ -96,21 +92,22 @@ export function checkCredits(userId: string, estimatedTokens: number = 1000): bo
  * 获取用户使用统计
  */
 export function getUserUsageStats(userId: string): {
-    totalTokensUsed: number;
-    totalCreditsUsed: number;
-    remainingCredits: number;
-    currentPeriodStart: string;
-    currentPeriodEnd: string;
-    requestCount: number;
+    readonly totalTokensUsed: number;
+    readonly totalCreditsUsed: number;
+    readonly remainingCredits: number;
+    readonly currentPeriodStart: string;
+    readonly currentPeriodEnd: string;
+    readonly requestCount: number;
 } {
-    const usage = getOrCreateUserUsage(userId);
+    const usage = getCurrentPeriodUsage(userId);
+    const { start, end } = getCurrentBillingPeriod();
 
     return {
         totalTokensUsed: usage.totalInputTokens + usage.totalOutputTokens,
         totalCreditsUsed: usage.totalCreditsUsed,
         remainingCredits: Math.max(0, config.billing.freeCreditsPerMonth - usage.totalCreditsUsed),
-        currentPeriodStart: usage.currentPeriodStart.toISOString(),
-        currentPeriodEnd: usage.currentPeriodEnd.toISOString(),
+        currentPeriodStart: start,
+        currentPeriodEnd: end,
         requestCount: usage.requestCount,
     };
 }
@@ -119,13 +116,14 @@ export function getUserUsageStats(userId: string): {
  * 获取当前计费信息
  */
 export function getCurrentBilling(userId: string): {
-    currentAmount: number;
-    currency: string;
-    billingCycleEnd: string;
-    creditsUsed: number;
-    freeCreditsLimit: number;
+    readonly currentAmount: number;
+    readonly currency: string;
+    readonly billingCycleEnd: string;
+    readonly creditsUsed: number;
+    readonly freeCreditsLimit: number;
 } {
-    const usage = getOrCreateUserUsage(userId);
+    const usage = getCurrentPeriodUsage(userId);
+    const { end } = getCurrentBillingPeriod();
 
     // 简单计费模型：超出免费额度按 $0.01/credit 计费
     const overageCredits = Math.max(0, usage.totalCreditsUsed - config.billing.freeCreditsPerMonth);
@@ -134,16 +132,21 @@ export function getCurrentBilling(userId: string): {
     return {
         currentAmount,
         currency: 'USD',
-        billingCycleEnd: usage.currentPeriodEnd.toISOString(),
+        billingCycleEnd: end,
         creditsUsed: usage.totalCreditsUsed,
         freeCreditsLimit: config.billing.freeCreditsPerMonth,
     };
 }
 
 /**
- * 重置用户使用量（用于测试或新计费周期）
+ * 重置用户使用量（用于测试或管理操作）
  */
 export function resetUserUsage(userId: string): void {
-    userUsageMap.delete(userId);
-}
+    const db = getDb();
+    const { start, end } = getCurrentBillingPeriod();
 
+    db.prepare(`
+        DELETE FROM usage_records
+        WHERE user_id = ? AND created_at >= ? AND created_at <= ?
+    `).run(userId, start, end);
+}

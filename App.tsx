@@ -7,7 +7,8 @@ import { AnalysisView } from './components/AnalysisView';
 import { ResourceView } from './components/ResourceView';
 import { TutorView } from './components/TutorView';
 import { SimulationView } from './components/SimulationView';
-import { Hexagon, ChevronRight, Globe } from 'lucide-react';
+import { LifeSimulationView } from './components/LifeSimulationView';
+import { Hexagon, ChevronRight, Globe, Video } from 'lucide-react';
 
 const App: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>(AppPhase.SOUL_SCAN);
@@ -70,6 +71,9 @@ const App: React.FC = () => {
         if (!selectedJob) return null;
         return <TutorView job={selectedJob} resources={resources} language={language} />;
 
+      case AppPhase.LIFE_SIMULATION:
+        return <LifeSimulationView language={language} onBack={() => setPhase(AppPhase.SOUL_SCAN)} />;
+
       default:
         return <div>Unknown Glitch in the Matrix</div>;
     }
@@ -82,6 +86,7 @@ const App: React.FC = () => {
     { id: AppPhase.SIMULATION, label: "SIMULATION" },
     { id: AppPhase.SKILL_TREE, label: "SKILL_TREE" },
     { id: AppPhase.TUTOR, label: "TUTOR" },
+    { id: AppPhase.LIFE_SIMULATION, label: "LIFE_SIM" },
   ];
 
   return (
@@ -97,6 +102,19 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-6">
+            {/* Life Simulation Button */}
+            <button
+              onClick={() => setPhase(AppPhase.LIFE_SIMULATION)}
+              className={`hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                phase === AppPhase.LIFE_SIMULATION
+                  ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-[0_0_15px_rgba(236,72,153,0.5)]'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+              }`}
+            >
+              <Video className="w-4 h-4" />
+              {language === 'zh' ? '人生模拟' : 'Life Sim'}
+            </button>
+
             {/* Step Indicator */}
             <div className="hidden md:flex items-center space-x-1">
               {steps.map((step, idx) => {
