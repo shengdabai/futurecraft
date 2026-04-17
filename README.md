@@ -73,3 +73,77 @@ Futurecraft/
 
 iOS 版本位于 `FutureCraftiOS/` 目录，使用 SwiftUI 构建。
 详见 [`FutureCraftiOS/APP_STORE_CHECKLIST.md`](./FutureCraftiOS/APP_STORE_CHECKLIST.md)
+
+---
+
+# FutureCraft - AI Career Planning RPG
+
+An AI-based immersive career exploration platform that helps users discover suitable career paths through RPG gamification.
+
+## Architecture Overview
+
+This project uses a **frontend-backend separation + backend proxy** architecture to ensure API Key security:
+
+```
+[Frontend React App] → [Backend API Server] → [Gemini API]
+                          ↓
+                   [JWT Authentication + Rate Limiting + Content Filtering]
+```
+
+**Security Features:**
+- ✅ API Keys stored only in backend server environment variables
+- ✅ All AI requests proxied through backend
+- ✅ JWT user authentication
+- ✅ IP and user-level rate limiting
+- ✅ Content safety filtering
+
+## Local Development
+
+**Prerequisites:** Node.js 18+
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Configure environment variables (create `.env.local`):
+   ```env
+   # Backend API server URL (development environment)
+   VITE_API_BASE_URL=http://localhost:8080
+   ```
+
+3. Start frontend:
+   ```bash
+   npm run dev
+   ```
+
+4. Ensure backend server is running (see `backend/` directory)
+
+## Backend Deployment
+
+The backend server handles:
+- User authentication (JWT)
+- AI API proxy (Gemini/Qwen)
+- Rate limiting and quota management
+- Content safety filtering
+- Usage statistics and billing
+
+See [`backend/README.md`](./backend/README.md) for details.
+
+## Project Structure
+
+```
+Futurecraft/
+├── App.tsx              # Main application component
+├── components/          # UI components
+├── services/
+│   └── apiService.ts    # API call layer (via backend proxy)
+├── types.ts             # TypeScript type definitions
+├── backend/             # Backend server code
+└── FutureCraftiOS/      # iOS native app
+```
+
+## iOS Application
+
+The iOS version is located in the `FutureCraftiOS/` directory, built with SwiftUI.
+See [`FutureCraftiOS/APP_STORE_CHECKLIST.md`](./FutureCraftiOS/APP_STORE_CHECKLIST.md) for details.
