@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# OMC state
+.omc/
+
 # Database
 backend/data/
 *.db
