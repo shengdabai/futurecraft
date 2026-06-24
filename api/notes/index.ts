@@ -12,7 +12,7 @@ import { getDatabase, generateId } from '../lib/db';
 import { sendSuccess, sendError, sendPredefinedError } from '../lib/response';
 
 // API 配置
-const GETNOTES_URL = 'MAKE_WEBHOOK_URL_REDACTED';
+const GETNOTES_URL = process.env.GETNOTES_URL || '';
 const GETNOTES_TOKEN = process.env.GETNOTES_TOKEN || '';
 const GETNOTES_TOPIC_IDS = ['K0BlyZmn', 'BJ888R8J'];
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
@@ -107,7 +107,7 @@ async function handleSearch(req: VercelRequest, res: VercelResponse, userId: str
     let content = '';
     let source: 'getnotes' | 'ai' = 'getnotes';
 
-    if (GETNOTES_TOKEN) {
+    if (GETNOTES_TOKEN && GETNOTES_URL) {
         try {
             const result = await callGetNotesAPI(query);
             if (result.answer) content = result.answer;

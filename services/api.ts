@@ -114,9 +114,11 @@ export async function login(username: string, password: string): Promise<AuthUse
 
 /**
  * 获取当前用户信息
+ * 后端 handler 暴露的是 GET /api/auth/me（见 api/index.ts），
+ * 旧的 `/auth` 路径不存在会返回 404，这里改为正确的 `/auth/me`。
  */
 export async function getCurrentUser(): Promise<UserInfo> {
-  return apiRequest<UserInfo>('/auth');
+  return apiRequest<UserInfo>('/auth/me');
 }
 
 // ============ AI API ============

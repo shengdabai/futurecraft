@@ -12,9 +12,22 @@ function generateToken(userId: string) {
   return token;
 }
 
+// Allowed CORS origins. Configure via ALLOWED_ORIGINS (comma-separated) in
+// the deployment environment; defaults to the production domain.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://zturnsgo.com')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // CORS headers — reflect only allow-listed origins instead of a wildcard.
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0] || 'https://zturnsgo.com');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -52,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const userId = `user_${userIdCounter++}`;
       const userData = {
         username,
+        password,
         id: userId,
         type: 'regular'
       };
@@ -72,12 +86,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Simple login
     if (endpoint === 'login' && req.method === 'POST') {
-      const { username } = req.body;
+      const { username, password } = req.body;
 
-      if (!username) {
+      if (!username || !password) {
         return res.status(400).json({
           success: false,
-          error: { code: 'INVALID_REQUEST', message: '用户名是必填项' }
+          error: { code: 'INVALID_REQUEST', message: '用户名和密码是必填项' }
         });
       }
 
@@ -90,10 +104,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      if (!userData) {
+      if (!userData || userData.password !== password) {
         return res.status(400).json({
           success: false,
-          error: { code: 'INVALID_CREDENTIALS', message: '用户不存在' }
+          error: { code: 'INVALID_CREDENTIALS', message: '用户名或密码错误' }
         });
       }
 

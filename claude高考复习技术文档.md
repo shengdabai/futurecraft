@@ -130,7 +130,7 @@
 │   │                 │ │                 │ │                             │   │
 │   │ Nano Banana Pro2│ │   Gemini API    │ │       Get笔记 API           │   │
 │   │                 │ │                 │ │                             │   │
-│   │  [待补充]       │ │  AIzaSy****     │ │  hook.us2.make.com          │   │
+│   │  [待补充]       │ │  AIzaSy****     │ │  $GETNOTES_URL          │   │
 │   │                 │ │                 │ │                             │   │
 │   │  图片 OCR       │ │  文本生成       │ │  知识点笔记数据库            │   │
 │   │  题目识别       │ │  解题分析       │ │  topic_ids: K0BlyZmn        │   │
@@ -324,7 +324,7 @@
 
 | 配置项 | 值 |
 |--------|-----|
-| Endpoint | `MAKE_WEBHOOK_URL_REDACTED` |
+| Endpoint | `$GETNOTES_URL (set via env, see .env.example)` |
 | Method | POST |
 | Content-Type | application/json |
 | Authorization | Bearer Token (环境变量存储) |

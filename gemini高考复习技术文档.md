@@ -107,7 +107,7 @@ graph TD
     *   **并发/配额**: 前端直接发起请求，需处理并发限制和网络抖动。
 
 ### 4.3 Get 笔记 / 问答接口
-*   **Endpoint**: `MAKE_WEBHOOK_URL_REDACTED` (保持不变)
+*   **Endpoint**: `$GETNOTES_URL (set via env, see .env.example)` (保持不变)
 
 ---
 

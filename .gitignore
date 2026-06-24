@@ -31,5 +31,26 @@ backend/data/
 *.njsproj
 *.sln
 *.sw?
-.env.production
+# Environment / secrets
 .env
+.env.*
+.env.local
+.env.production
+!.env.example
+*.pem
+*.key
+
+# OMC / internal state files
+.omc/
+*-todo.md
+state*.json
+.pipeline-state.json
+
+# Build output / caches
+output/
+.cache/
+.vercel/
+
+# Finder duplicate artifacts ("name 2.ext")
+* 2.*
+* 2

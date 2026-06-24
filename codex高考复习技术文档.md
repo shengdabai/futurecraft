@@ -59,7 +59,7 @@
 ### 4.1 Get笔记 Open API（已提供）
 
 - 当前接入（Make Hook）:
-  `MAKE_WEBHOOK_URL_REDACTED`
+  `$GETNOTES_URL (set via env, see .env.example)`
 - 官方 OpenAPI Endpoint:
   `https://open-api.biji.com/getnote/openapi/knowledge/search/recall`
 - 认证方式:

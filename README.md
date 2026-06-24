@@ -65,6 +65,23 @@ npm run build    # builds the frontend and installs the api workspace
 npm run preview  # preview the production build locally
 ```
 
+## 🔐 Security
+
+All secrets live **only** in server-side environment variables — never in code or the
+client bundle. Copy [`.env.example`](./.env.example) and configure these in your Vercel
+project settings before deploying:
+
+- `GEMINI_API_KEY` — Google Gemini API key used by the AI proxy (required).
+- `ALLOWED_ORIGINS` — comma-separated CORS allow-list (defaults to `https://zturnsgo.com`).
+- **`MAKE_WEBHOOK_URL`** (a.k.a. `GETNOTES_URL`) — the Make.com webhook URL for the optional
+  GetNote knowledge-retrieval integration. **This must be supplied via an environment
+  variable; do not hardcode it.** The integration runs only when both this URL and
+  `GETNOTES_TOKEN` are set, and is skipped otherwise.
+
+> ⚠️ A Make.com webhook URL was hardcoded in an earlier commit. It has been removed from the
+> working tree and moved to an environment variable. If you are forking from full git history,
+> **rotate that webhook** in Make.com — old commits may still contain the value.
+
 ## 📖 Usage
 
 1. **Soul Scan** — fill in your background, hobbies, and a hidden talent.
@@ -98,7 +115,7 @@ More projects in the same direction:
 
 ## License
 
-Released under the MIT License. (Add a `LICENSE` file to the repo to make the terms explicit.)
+Released under the MIT License. See the [`LICENSE`](./LICENSE) file for the full terms.
 
 ---
 
@@ -165,6 +182,20 @@ npm run build    # 构建前端并安装 api 工作区依赖
 npm run preview  # 本地预览生产构建
 ```
 
+## 🔐 安全说明
+
+所有密钥**只**存在于服务端环境变量中，绝不写进代码或前端打包产物。部署前请复制
+[`.env.example`](./.env.example) 并在 Vercel 项目设置中配置以下变量：
+
+- `GEMINI_API_KEY` —— AI 代理使用的 Google Gemini API Key（必填）。
+- `ALLOWED_ORIGINS` —— CORS 白名单（逗号分隔，默认 `https://zturnsgo.com`）。
+- **`MAKE_WEBHOOK_URL`**（即 `GETNOTES_URL`）—— 可选 GetNote 知识检索集成所用的 Make.com
+  Webhook URL。**必须通过环境变量配置，禁止硬编码。** 仅当该 URL 与 `GETNOTES_TOKEN`
+  同时设置时集成才会启用，否则自动跳过。
+
+> ⚠️ 早期某次提交曾硬编码过一个 Make.com Webhook URL，现已从工作区移除并改为环境变量。
+> 若你从完整 git 历史 fork，请在 Make.com **轮换该 Webhook**——旧提交中可能仍含该值。
+
 ## 📖 使用流程
 
 1. **灵魂扫描** — 填写背景、爱好和一项隐藏才能。
@@ -198,4 +229,4 @@ FutureCraft 处于**活跃 Beta** 阶段。六阶段核心流程已实现，应�
 
 ## 许可证
 
-基于 MIT 许可证发布。（建议在仓库中添加 `LICENSE` 文件以明确条款。）
+基于 MIT 许可证发布。完整条款见仓库中的 [`LICENSE`](./LICENSE) 文件。

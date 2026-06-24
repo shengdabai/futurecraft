@@ -13,7 +13,7 @@ import { getDatabase, generateId } from '../lib/db';
 import { sendSuccess, sendError, sendPredefinedError } from '../lib/response';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GETNOTES_URL = 'MAKE_WEBHOOK_URL_REDACTED';
+const GETNOTES_URL = process.env.GETNOTES_URL || '';
 const GETNOTES_TOKEN = process.env.GETNOTES_TOKEN || '';
 const GETNOTES_TOPIC_IDS = ['K0BlyZmn', 'BJ888R8J'];
 const TEXT_MODEL = 'gemini-2.5-flash-preview-05-20';
@@ -118,7 +118,7 @@ async function handleTutor(req: VercelRequest, res: VercelResponse, userId: stri
   const historyContext = history.length > 0 ? history.reverse().map(h => `${h.role === 'user' ? '学生' : 'AI'}: ${h.content}`).join('\n') : '';
 
   let knowledgeContext = '';
-  if (GETNOTES_TOKEN) {
+  if (GETNOTES_TOKEN && GETNOTES_URL) {
     try {
       const resp = await fetch(GETNOTES_URL, {
         method: 'POST',
@@ -156,7 +156,7 @@ async function handlePredict(req: VercelRequest, res: VercelResponse, userId: st
   if (!subject) return sendError(res, 'INVALID_REQUEST', '请选择学科', 400);
 
   let examData = '';
-  if (GETNOTES_TOKEN) {
+  if (GETNOTES_TOKEN && GETNOTES_URL) {
     const queries = [`${SUBJECT_NAMES[subject]}高考真题 ${topic || ''} 出题规律`, `${SUBJECT_NAMES[subject]}高考 考点分析`];
     for (const q of queries) {
       try {
