@@ -4,16 +4,18 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/database.js';
 import * as iapRepo from '../db/iapRepository.js';
 import * as userRepo from '../db/userRepository.js';
+import { computeSubscriptionExpiry, getConsumableCredits } from '../services/iapCatalog.js';
 
 const router = Router();
 
 router.use(authMiddleware);
 
 // 输入验证
+// points 仅为兼容旧版客户端的可选字段：入账点数一律由服务端 iapCatalog 按 productId 决定，不使用该值
 const verifyPurchaseSchema = z.object({
     transactionId: z.string().min(1),
     productId: z.string().min(1),
-    points: z.number().int().min(1).max(100000),
+    points: z.unknown().optional(),
 });
 
 const syncSubscriptionSchema = z.object({
@@ -118,8 +120,23 @@ router.post('/verify-purchase', async (req: Request, res: Response) => {
             });
         }
 
-        const { transactionId, productId, points } = parseResult.data;
+        const { transactionId, productId, points: clientPoints } = parseResult.data;
         const userId = req.user!.userId;
+
+        // 0. 点数由服务端目录决定，未知或非消费型商品直接拒绝（不信任客户端 points）
+        const points = getConsumableCredits(productId);
+        if (points === undefined) {
+            return res.status(400).json({
+                error: 'UnknownProduct',
+                message: '未知的商品',
+            });
+        }
+        if (clientPoints !== undefined && clientPoints !== points) {
+            console.warn(
+                `[IAP] Ignoring client-reported points: user=${userId} product=${productId} `
+                + `client=${typeof clientPoints === 'number' ? clientPoints : typeof clientPoints} catalog=${points}`,
+            );
+        }
 
         // 1. App Store 验证（在事务外执行，因为是异步网络调用）
         const verification = await verifyWithAppStore(transactionId);
@@ -207,6 +224,15 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
         const { transactionId, productId } = parseResult.data;
         const userId = req.user!.userId;
 
+        // 只接受订阅类商品，过期时间按服务端目录天数计算
+        const expiresAt = computeSubscriptionExpiry(productId, Date.now());
+        if (expiresAt === undefined) {
+            return res.status(400).json({
+                error: 'UnknownProduct',
+                message: '未知的订阅商品',
+            });
+        }
+
         // App Store 验证（在事务外执行，因为是异步网络调用）
         const verification = await verifyWithAppStore(transactionId);
         if (!verification.isValid) {
@@ -218,7 +244,6 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
 
         // 在 SQLite 事务中执行：查重 + 插入 + 更新订阅（原子性）
         const db = getDb();
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
         const result = db.transaction(() => {
             const existingTx = iapRepo.findByTransactionId(transactionId);
