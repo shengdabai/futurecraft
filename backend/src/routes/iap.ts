@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/database.js';
 import * as iapRepo from '../db/iapRepository.js';
 import * as userRepo from '../db/userRepository.js';
-import { computeSubscriptionExpiry, getConsumableCredits } from '../services/iapCatalog.js';
+import { getConsumableCredits, getSubscriptionDays, resolveSubscriptionExpiry } from '../services/iapCatalog.js';
 
 const router = Router();
 
@@ -39,13 +39,17 @@ const APP_STORE_CONFIG = {
 async function verifyWithAppStore(transactionId: string): Promise<{
     readonly isValid: boolean;
     readonly productId?: string;
+    /** 订阅交易的到期时间(毫秒),取自 Apple 校验过的交易信息;补全校验时必须填写,否则订阅不会被授予 */
+    readonly expiresAtMs?: number;
+    /** 开发模式跳过了远程校验 */
+    readonly skipped?: boolean;
     readonly error?: string;
 }> {
     // 如果没有配置 App Store API 密钥，跳过远程验证
     if (!APP_STORE_CONFIG.keyId || !APP_STORE_CONFIG.issuerId) {
         if (process.env.NODE_ENV === 'development') {
             console.warn('[IAP] App Store API not configured, skipping verification in development mode');
-            return { isValid: true };
+            return { isValid: true, skipped: true };
         }
         return {
             isValid: false,
@@ -224,9 +228,8 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
         const { transactionId, productId } = parseResult.data;
         const userId = req.user!.userId;
 
-        // 只接受订阅类商品，过期时间按服务端目录天数计算
-        const expiresAt = computeSubscriptionExpiry(productId, Date.now());
-        if (expiresAt === undefined) {
+        // 只接受订阅类商品
+        if (getSubscriptionDays(productId) === undefined) {
             return res.status(400).json({
                 error: 'UnknownProduct',
                 message: '未知的订阅商品',
@@ -235,10 +238,17 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
 
         // App Store 验证（在事务外执行，因为是异步网络调用）
         const verification = await verifyWithAppStore(transactionId);
-        if (!verification.isValid) {
+        if (!verification.isValid || (verification.productId !== undefined && verification.productId !== productId)) {
             return res.status(400).json({
                 error: 'VerificationFailed',
                 message: '订阅验证失败',
+            });
+        }
+        // 到期时间必须来自 Apple 校验过的交易(开发模式除外),提交时间不能决定它
+        if (resolveSubscriptionExpiry(productId, verification, Date.now(), null) === undefined) {
+            return res.status(400).json({
+                error: 'VerificationFailed',
+                message: '订阅到期时间无法确认',
             });
         }
 
@@ -264,10 +274,12 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
                 verified: true,
             });
 
+            // 不缩短账户上已有的更晚到期时间
+            const expiresAt = resolveSubscriptionExpiry(productId, verification, Date.now(), userRow.subscription_expires_at)!;
             userRepo.updateSubscriptionTier(userId, 'PRO');
             userRepo.updateSubscriptionExpiresAt(userId, expiresAt);
 
-            return { success: true as const };
+            return { success: true as const, expiresAt };
         })();
 
         if ('error' in result) {
@@ -287,7 +299,7 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
             success: true,
             message: '订阅同步成功',
             subscriptionTier: 'PRO',
-            expiresAt,
+            expiresAt: result.expiresAt,
         });
     } catch (error) {
         console.error('Subscription sync error:', error);

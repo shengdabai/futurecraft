@@ -43,3 +43,29 @@ export function computeSubscriptionExpiry(productId: string, nowMs: number): str
     }
     return new Date(nowMs + days * DAY_MS).toISOString();
 }
+
+/**
+ * 订阅到期时间:以 Apple 校验过的交易到期时间为准(expiresAtMs);只有开发模式跳过校验时(skipped)才按目录天数从现在起算。
+ * 两者都没有时返回 undefined,调用方不授予订阅。账户上已有更晚的到期时间时保留它,另一笔较短的订阅不会把它缩短。
+ */
+export function resolveSubscriptionExpiry(
+    productId: string,
+    verified: { readonly expiresAtMs?: number; readonly skipped?: boolean },
+    nowMs: number,
+    currentExpiresAt: string | null | undefined,
+): string | undefined {
+    if (getSubscriptionDays(productId) === undefined) {
+        return undefined;
+    }
+    let expiresAt: string | undefined;
+    if (verified.expiresAtMs !== undefined && Number.isFinite(verified.expiresAtMs)) {
+        expiresAt = new Date(verified.expiresAtMs).toISOString();
+    } else if (verified.skipped) {
+        expiresAt = computeSubscriptionExpiry(productId, nowMs);
+    }
+    if (expiresAt === undefined) {
+        return undefined;
+    }
+    const current = currentExpiresAt ? Date.parse(currentExpiresAt) : NaN;
+    return Number.isFinite(current) && current > Date.parse(expiresAt) ? new Date(current).toISOString() : expiresAt;
+}

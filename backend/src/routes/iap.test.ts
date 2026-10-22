@@ -237,3 +237,18 @@ for (const [productId, days] of [
         }
     });
 }
+
+test('sync-subscription: a monthly transaction submitted after a yearly one does not shorten PRO', async () => {
+    const { userId, token } = createUser();
+    const warn = mock.method(console, 'warn', () => undefined);
+    try {
+        const yearly = await post('/sync-subscription', token, { transactionId: nextTransactionId(), productId: 'com.zturns.futurecraft.sub.yearly' });
+        assert.equal(yearly.status, 200);
+        const monthly = await post('/sync-subscription', token, { transactionId: nextTransactionId(), productId: 'com.zturns.futurecraft.sub.monthly' });
+        assert.equal(monthly.status, 200);
+        assert.equal(monthly.body.expiresAt, yearly.body.expiresAt);
+        assert.equal(userRepo.findById(userId)?.subscription_expires_at, yearly.body.expiresAt);
+    } finally {
+        warn.mock.restore();
+    }
+});

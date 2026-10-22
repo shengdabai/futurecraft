@@ -6,6 +6,7 @@ import {
     getConsumableCredits,
     getSubscriptionDays,
     computeSubscriptionExpiry,
+    resolveSubscriptionExpiry,
 } from './iapCatalog.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,4 +63,25 @@ test('computeSubscriptionExpiry rejects non-subscription products', () => {
     const now = Date.UTC(2026, 0, 1);
     assert.equal(computeSubscriptionExpiry('com.zturns.futurecraft.points.250', now), undefined);
     assert.equal(computeSubscriptionExpiry('not-a-product', now), undefined);
+});
+
+const YEARLY = 'com.zturns.futurecraft.sub.yearly';
+const T0 = Date.parse('2026-01-01T00:00:00.000Z');
+
+test('a verified Apple expiry is used as is, so submitting an old transaction late does not extend it', () => {
+    const appleExpiry = T0 + 365 * DAY_MS;
+    const submittedLate = T0 + 100 * DAY_MS;
+    assert.equal(resolveSubscriptionExpiry(YEARLY, { expiresAtMs: appleExpiry }, submittedLate, null), new Date(appleExpiry).toISOString());
+});
+
+test('without a trusted expiry the subscription is not granted, except in the development bypass', () => {
+    assert.equal(resolveSubscriptionExpiry(YEARLY, {}, T0, null), undefined);
+    assert.equal(resolveSubscriptionExpiry(YEARLY, { skipped: true }, T0, null), new Date(T0 + 365 * DAY_MS).toISOString());
+    assert.equal(resolveSubscriptionExpiry('com.zturns.futurecraft.points.250', { skipped: true }, T0, null), undefined);
+});
+
+test('a later expiry already on the account is never shortened', () => {
+    const yearlyEnd = new Date(T0 + 365 * DAY_MS).toISOString();
+    assert.equal(resolveSubscriptionExpiry('com.zturns.futurecraft.sub.monthly', { expiresAtMs: T0 + 30 * DAY_MS }, T0, yearlyEnd), yearlyEnd);
+    assert.equal(resolveSubscriptionExpiry(YEARLY, { expiresAtMs: T0 + 400 * DAY_MS }, T0, yearlyEnd), new Date(T0 + 400 * DAY_MS).toISOString());
 });
