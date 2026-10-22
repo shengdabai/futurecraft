@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { getDb } from '../db/database.js';
 import * as iapRepo from '../db/iapRepository.js';
 import * as userRepo from '../db/userRepository.js';
-import { getConsumableCredits, getSubscriptionDays, resolveSubscriptionExpiry } from '../services/iapCatalog.js';
+import { checkSubscriptionGrant, getConsumableCredits, getSubscriptionDays, resolveSubscriptionExpiry } from '../services/iapCatalog.js';
 
 const router = Router();
 
@@ -238,17 +238,24 @@ router.post('/sync-subscription', async (req: Request, res: Response) => {
 
         // App Store 验证（在事务外执行，因为是异步网络调用）
         const verification = await verifyWithAppStore(transactionId);
-        if (!verification.isValid || (verification.productId !== undefined && verification.productId !== productId)) {
+        // 校验结果必须带上同一个 productId(开发模式除外);到期时间必须来自 Apple 校验过的交易,提交时间不能决定它
+        const grant = checkSubscriptionGrant(productId, verification, Date.now());
+        if (grant === 'VerificationFailed') {
             return res.status(400).json({
                 error: 'VerificationFailed',
                 message: '订阅验证失败',
             });
         }
-        // 到期时间必须来自 Apple 校验过的交易(开发模式除外),提交时间不能决定它
-        if (resolveSubscriptionExpiry(productId, verification, Date.now(), null) === undefined) {
+        if (grant === 'NoTrustedExpiry') {
             return res.status(400).json({
                 error: 'VerificationFailed',
                 message: '订阅到期时间无法确认',
+            });
+        }
+        if (grant === 'Expired') {
+            return res.status(400).json({
+                error: 'SubscriptionExpired',
+                message: '订阅已过期',
             });
         }
 

@@ -7,6 +7,7 @@ import {
     getSubscriptionDays,
     computeSubscriptionExpiry,
     resolveSubscriptionExpiry,
+    checkSubscriptionGrant,
 } from './iapCatalog.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -84,4 +85,25 @@ test('a later expiry already on the account is never shortened', () => {
     const yearlyEnd = new Date(T0 + 365 * DAY_MS).toISOString();
     assert.equal(resolveSubscriptionExpiry('com.zturns.futurecraft.sub.monthly', { expiresAtMs: T0 + 30 * DAY_MS }, T0, yearlyEnd), yearlyEnd);
     assert.equal(resolveSubscriptionExpiry(YEARLY, { expiresAtMs: T0 + 400 * DAY_MS }, T0, yearlyEnd), new Date(T0 + 400 * DAY_MS).toISOString());
+});
+
+test('a verified subscription is granted only when the verified productId is the requested one', () => {
+    const future = T0 + 30 * DAY_MS;
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, productId: YEARLY, expiresAtMs: future }, T0), 'ok');
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, expiresAtMs: future }, T0), 'VerificationFailed');
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, productId: 'com.zturns.futurecraft.sub.monthly', expiresAtMs: future }, T0), 'VerificationFailed');
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: false, productId: YEARLY, expiresAtMs: future }, T0), 'VerificationFailed');
+});
+
+test('the development bypass is granted without a verified productId or expiry', () => {
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, skipped: true }, T0), 'ok');
+});
+
+test('a verified subscription without an expiry is not granted', () => {
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, productId: YEARLY }, T0), 'NoTrustedExpiry');
+});
+
+test('an expired transaction is not granted, even when submitted for the first time', () => {
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, productId: YEARLY, expiresAtMs: T0 - 1 }, T0), 'Expired');
+    assert.equal(checkSubscriptionGrant(YEARLY, { isValid: true, productId: YEARLY, expiresAtMs: T0 }, T0), 'Expired');
 });

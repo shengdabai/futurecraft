@@ -69,3 +69,34 @@ export function resolveSubscriptionExpiry(
     const current = currentExpiresAt ? Date.parse(currentExpiresAt) : NaN;
     return Number.isFinite(current) && current > Date.parse(expiresAt) ? new Date(current).toISOString() : expiresAt;
 }
+
+/** sync-subscription 用到的 App Store 校验结果;开发模式跳过远程校验时 skipped 为 true,不带 productId 与到期时间 */
+export interface SubscriptionVerification {
+    readonly isValid: boolean;
+    readonly productId?: string;
+    readonly expiresAtMs?: number;
+    readonly skipped?: boolean;
+}
+
+/**
+ * 一笔订阅交易能否授予 PRO,返回 'ok' 或拒绝原因:
+ * 校验必须通过;除开发模式跳过校验外,校验结果的 productId 必须等于请求的商品,缺失也拒绝;
+ * 交易自身的到期时间必须可信且晚于现在,已过期的交易不写入任何东西(账户上已有的权益不受影响)。
+ */
+export function checkSubscriptionGrant(
+    productId: string,
+    verification: SubscriptionVerification,
+    nowMs: number,
+): 'ok' | 'VerificationFailed' | 'NoTrustedExpiry' | 'Expired' {
+    if (!verification.isValid) {
+        return 'VerificationFailed';
+    }
+    if (!verification.skipped && verification.productId !== productId) {
+        return 'VerificationFailed';
+    }
+    const expiresAt = resolveSubscriptionExpiry(productId, verification, nowMs, null);
+    if (expiresAt === undefined) {
+        return 'NoTrustedExpiry';
+    }
+    return Date.parse(expiresAt) > nowMs ? 'ok' : 'Expired';
+}
