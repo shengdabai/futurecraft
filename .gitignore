@@ -30,3 +30,6 @@ backend/data/
 *.sw?
 .env.production
 .env
+
+# local agent state
+.omc/state/
