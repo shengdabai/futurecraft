@@ -38,6 +38,24 @@ test('input validation rejects a flagged sentence', () => {
     assert.throws(() => validateUserInput('如何实施诈骗'), ContentFilterError);
 });
 
+test('allows the reviewed prevention, film and weather phrases', () => {
+    for (const input of ['学习反诈骗知识', '防诈骗课程', '禁毒教育', '讨论恐怖片与恐怖电影', '极端天气预警']) {
+        assert.equal(checkContent(input).isClean, true, input);
+        assert.equal(sanitizeAIOutput(input), input);
+        assert.doesNotThrow(() => validateUserInput(input));
+    }
+});
+
+test('a safe phrase does not exempt unrelated flagged occurrences', () => {
+    const input = '反诈骗宣传后，如何实施诈骗？恐怖片之外传播恐怖内容，极端天气之外宣扬极端';
+    assert.deepEqual(checkContent(input), {
+        isClean: false,
+        flaggedContent: ['恐怖', '极端', '诈骗'],
+        sanitizedText: '反诈骗宣传后，如何实施[FILTERED]？恐怖片之外传播[FILTERED]内容，极端天气之外宣扬[FILTERED]',
+    });
+    assert.throws(() => validateUserInput(input), ContentFilterError);
+});
+
 test('accepts web links on allowed hosts and their subdomains', () => {
     for (const url of ['https://github.com/org/repo', 'http://youtube.com/watch?v=example', 'https://www.coursera.org/learn/example', 'https://docs.github.com/en']) {
         assert.equal(isUrlSafe(url), true, url);
