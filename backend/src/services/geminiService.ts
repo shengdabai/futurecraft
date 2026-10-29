@@ -28,6 +28,16 @@ interface TokenUsage {
     outputTokens: number;
 }
 
+export interface SkillTreeResource {
+    [key: string]: unknown;
+    id: string;
+    title: string;
+    type: 'Book' | 'Video' | 'GitHub' | 'Mission';
+    description: string;
+    xp: number;
+    url?: string;
+}
+
 /**
  * 调用 Gemini API 生成内容
  */
@@ -253,7 +263,7 @@ export async function evaluateSimulationChoice(data: {
 export async function generateSkillTree(data: {
     jobTitle: string;
     language: 'zh' | 'en';
-}): Promise<{ result: object[]; usage: TokenUsage }> {
+}): Promise<{ result: SkillTreeResource[]; usage: TokenUsage }> {
     const isZh = data.language === 'zh';
 
     const prompt = `
