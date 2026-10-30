@@ -126,8 +126,12 @@ test('guest endpoint resolves dependencies and hashes passwords with fixture-onl
     assert.equal((await call(handler, 'auth/guest', {})).code, 201);
 });
 
-test('IAP never grants credits or subscriptions without verified Apple evidence, in any environment', async () => {
-    for (const env of [{ NODE_ENV: 'development' },
+// main's IAP route (server catalog, GK-06) replaced this branch's 503 stub in the merge. Development mode
+// without App Store keys deliberately skips Apple verification there (see backend/src/routes/iap.test.ts),
+// so this test covers every other environment: with real catalog products, nothing is granted and the
+// database is never opened.
+test('IAP never grants credits or subscriptions without verified Apple evidence outside keyless development', async () => {
+    for (const env of [{ NODE_ENV: 'production' },
         { NODE_ENV: 'development', APP_STORE_KEY_ID: 'fixture-key', APP_STORE_ISSUER_ID: 'fixture-issuer' },
         { NODE_ENV: 'production', APP_STORE_KEY_ID: 'fixture-key', APP_STORE_ISSUER_ID: 'fixture-issuer' }]) {
         const { default: router } = await load('backend/src/routes/iap.ts', {
@@ -138,12 +142,13 @@ test('IAP never grants credits or subscriptions without verified Apple evidence,
                 '../db/userRepository.js': 'export const findById=()=>{throw Error("No users")}; export const updateCreditBalance=()=>{}; export const updateSubscriptionTier=()=>{}; export const updateSubscriptionExpiresAt=()=>{};',
             },
         });
-        for (const path of ['/verify-purchase', '/sync-subscription']) {
+        for (const [path, productId] of [['/verify-purchase', 'com.zturns.futurecraft.points.250'],
+            ['/sync-subscription', 'com.zturns.futurecraft.sub.monthly']]) {
             const handler = router.stack.find(layer => layer.route?.path === path).route.stack[0].handle;
             const res = response();
-            await handler({ body: { transactionId: 'fixture-tx', productId: 'fixture-product', points: 100000 }, user: { userId: 'fixture' } }, res);
-            assert.equal(res.code, 503);
-            assert.equal(res.body.error, 'VerificationUnavailable');
+            await handler({ body: { transactionId: 'fixture-tx', productId, points: 100000 }, user: { userId: 'fixture' } }, res);
+            assert.equal(res.code, 400);
+            assert.equal(res.body.error, 'VerificationFailed');
         }
     }
 });

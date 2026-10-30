@@ -28,16 +28,6 @@ interface TokenUsage {
     outputTokens: number;
 }
 
-export interface SkillTreeResource {
-    [key: string]: unknown;
-    id: string;
-    title: string;
-    type: 'Book' | 'Video' | 'GitHub' | 'Mission';
-    description: string;
-    xp: number;
-    url?: string;
-}
-
 /**
  * 调用 Gemini API 生成内容
  */
@@ -258,6 +248,19 @@ export async function evaluateSimulationChoice(data: {
 }
 
 /**
+ * 技能树中的单个学习资源（模型返回的 JSON，字段不保证齐全）
+ */
+export interface SkillTreeResource {
+    id?: string;
+    title?: string;
+    type?: string;
+    description?: string;
+    xp?: number;
+    url?: string;
+    [key: string]: unknown;
+}
+
+/**
  * 生成技能树
  */
 export async function generateSkillTree(data: {
@@ -295,17 +298,19 @@ export async function generateSkillTree(data: {
 export async function tutorChat(data: {
     history: Array<{ role: 'user' | 'model'; content: string }>;
     message: string;
-    jobTitle: string;
+    jobTitle?: string;
     jobDescription?: string;
     isBossMode: boolean;
     language: 'zh' | 'en';
 }): Promise<{ message: string; usage: TokenUsage }> {
     const isZh = data.language === 'zh';
+    // chatSchema 里 jobTitle 可选；缺省时不要把 "undefined" 写进提示词
+    const jobTitle = data.jobTitle?.trim() || "the user's target role";
 
     const systemInstruction = data.isBossMode
         ? `
       [MODE: BOSS BATTLE / MOCK INTERVIEW]
-      Role: Ultimate Interviewer Boss for "${data.jobTitle}".
+      Role: Ultimate Interviewer Boss for "${jobTitle}".
       Language: ${isZh ? 'Simplified Chinese' : 'English'}.
       Style: Strict, high-pressure, professional.
       Goal: Test the user. Ask hard follow-up questions.
@@ -313,7 +318,7 @@ export async function tutorChat(data: {
     `
         : `
       [MODE: SOCRATIC TUTOR]
-      Role: AI Mentor for "${data.jobTitle}".
+      Role: AI Mentor for "${jobTitle}".
       Language: ${isZh ? 'Simplified Chinese' : 'English'}.
       Style: Socratic method. Guide with questions, don't just give answers.
       Tone: Encouraging, like a teammate.
